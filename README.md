@@ -1,6 +1,6 @@
 # Banking Transactions Platform
 
-Nền tảng mẫu cho các nghiệp vụ ngân hàng số: thanh toán, chuyển tiền nội bộ và chuyển tiền liên ngân hàng. Hệ thống được định hướng theo kiến trúc microservices với Java Spring Boot, React, PostgreSQL, Apache Kafka và Redis.
+Nền tảng mẫu cho các nghiệp vụ ngân hàng số: thanh toán, chuyển tiền nội bộ và chuyển tiền liên ngân hàng. Codebase khởi đầu theo kiến trúc modular monolith với Java Spring Boot, React, PostgreSQL, Apache Kafka và Redis; chỉ tách microservice khi nhu cầu triển khai hoặc vận hành yêu cầu.
 
 > Đây là thiết kế tham khảo để học tập và phát triển sản phẩm. Không nên dùng trực tiếp để xử lý tiền thật nếu chưa hoàn tất kiểm thử độc lập, đánh giá an toàn, tích hợp hệ thống thanh toán được cấp phép, quản lý khóa/HSM và đáp ứng các yêu cầu pháp lý, tuân thủ tại thị trường triển khai.
 
@@ -22,15 +22,18 @@ Tên này dễ hiểu, mô tả đúng phạm vi hiện tại và phù hợp đ�
 
 ## Công nghệ dự kiến
 
-| Thành phần | Công nghệ | Trách nhiệm |
+| Thành phần | Công nghệ / phiên bản nền | Trách nhiệm |
 |---|---|---|
-| Web client | React + TypeScript | Giao diện khách hàng và vận hành |
-| Backend | Java, Spring Boot | API và các domain service |
-| Cơ sở dữ liệu | PostgreSQL | Dữ liệu giao dịch, tài khoản, sổ cái, outbox/inbox |
-| Message broker | Apache Kafka | Phát sự kiện và giao tiếp bất đồng bộ |
-| Cache / ephemeral state | Redis | Rate limiting, cache dữ liệu không trọng yếu, khóa ngắn hạn có TTL |
-| Quan sát hệ thống | OpenTelemetry + Prometheus/Grafana (dự kiến) | Metrics, tracing, dashboard và cảnh báo |
-| Triển khai | Docker Compose cho local; Kubernetes tùy môi trường | Đóng gói và vận hành |
+| JDK | Java 25 LTS | Runtime và biên dịch backend |
+| Backend | Spring Boot 4.0.x | API trong modular monolith; cập nhật bản vá mới nhất của nhánh |
+| Web client | Node.js 24 LTS, React 19, TypeScript 5.9 | Giao diện khách hàng và vận hành |
+| Cơ sở dữ liệu | PostgreSQL 18 | Dữ liệu giao dịch, tài khoản, sổ cái, outbox/inbox |
+| Message broker | Apache Kafka 4.1 | Phát sự kiện và giao tiếp bất đồng bộ |
+| Cache / ephemeral state | Redis 8 | Rate limiting, cache dữ liệu không trọng yếu, khóa ngắn hạn có TTL |
+| Quan sát hệ thống | Spring Boot Actuator; OpenTelemetry + Prometheus/Grafana (lộ trình) | Health check, metrics, tracing và cảnh báo |
+| Triển khai local | Docker Compose | PostgreSQL, Kafka và Redis cho phát triển |
+
+Java 25 và Node.js 24 là các nhánh LTS. PostgreSQL phát hành mỗi major với thời gian hỗ trợ dài; chọn PostgreSQL 18 làm baseline. Spring Boot, React và TypeScript không có cam kết LTS tương đương JDK/Node, vì vậy cần nâng bản vá thường xuyên và đánh giá nâng minor/major theo lịch bảo trì. Maven hiện ghim Spring Boot 4.0.0 để build có thể tái lập; trước khi triển khai cần nâng lên bản vá còn được hỗ trợ mới nhất của nhánh. Các tag Docker trong Compose chỉ dành cho local; môi trường thật cần pin digest, quản lý secret riêng và có quy trình nâng cấp.
 
 PostgreSQL là nguồn dữ liệu chuẩn cho số dư/sổ cái. Redis không được dùng làm nguồn duy nhất cho số dư hoặc trạng thái giao dịch tài chính.
 
@@ -151,9 +154,46 @@ API thực tế cần xác định schema, xác thực/ủy quyền, giới hạ
 
 ## Bắt đầu phát triển
 
-Repository hiện là bản thiết kế khởi đầu. Khi bổ sung mã nguồn, nên cung cấp các file cấu hình local không chứa bí mật (ví dụ `.env.example`) và Docker Compose cho PostgreSQL, Kafka, Redis cùng các service.
+### Yêu cầu
 
-Hướng dẫn chạy sẽ được cập nhật tại đây sau khi có mã nguồn và cấu hình môi trường. Không đưa mật khẩu, khóa ký, token hoặc dữ liệu ngân hàng thật vào repository.
+- JDK 25
+- Apache Maven 3.9+
+- Node.js 24 LTS và npm
+- Docker Engine với Docker Compose v2
+
+### Chạy các dịch vụ nền
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+Compose chỉ bind các cổng phát triển vào `localhost`. Mật khẩu trong `.env.example` là giá trị local mẫu, không dùng ở môi trường chia sẻ hoặc production.
+
+### Chạy backend
+
+```bash
+cd backend
+mvn spring-boot:run
+```
+
+Backend kết nối PostgreSQL local, tự chạy Flyway migration khi khởi động và cung cấp health check tại `http://localhost:8080/actuator/health`. Nếu thay đổi thông tin PostgreSQL trong `.env`, hãy truyền các giá trị tương ứng qua `DB_URL`, `DB_USERNAME` và `DB_PASSWORD` khi chạy backend.
+
+### Chạy web
+
+Mở terminal khác:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Mở URL Vite in trong terminal. Web dev server proxy `/actuator` tới backend để hiển thị trạng thái API. Các lệnh kiểm tra frontend là `npm run lint` và `npm run build`; backend có thể kiểm tra bằng `mvn test` trong thư mục `backend`.
+
+### Phạm vi hiện tại
+
+Đây là nền tảng khởi đầu, chưa có nghiệp vụ tạo/chuyển tiền, xác thực người dùng, ghi sổ ledger hay kết nối Kafka/Redis từ backend. Migration đầu tiên chỉ tạo các bảng inbox/outbox nền; cần chốt domain model và quy tắc tài chính trước khi bổ sung schema nghiệp vụ. Không đưa mật khẩu, khóa ký, token hoặc dữ liệu ngân hàng thật vào repository.
 
 ## Lộ trình gợi ý
 

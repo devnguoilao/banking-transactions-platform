@@ -1,0 +1,23 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Java / Maven
+**/target/
+
+# Node
+node_modules/
+web/dist/
+web/.vite/
+
+# IDEs
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
